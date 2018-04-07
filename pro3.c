@@ -13,6 +13,8 @@
 					  and the declaration of update_header() */
 FILE* fpout;
 
+const double TWO_PI = 2 * acos(-1);
+
 void modgen(int end, int blockframes, short* audioblock, int freq, int sr, int dur, double* env, int bd);
 void breaks(float* plist, float* llist);
 void addsyn(int dur);
@@ -29,7 +31,7 @@ int main(int argc, char** argv)
 	unsigned int ndx = 0;   /* phase index for synthesis */
 	float   dur, freq, sustain; /* duration, frequency, sustain */
 	int attack, decay, release, depth, shape;   /* attack, decay, release, bit-depth, shape*/
-	double  twopi;          /* 2*PI  */
+
 	wavehead *header;
 
 	if(argc != 6)
@@ -40,7 +42,6 @@ int main(int argc, char** argv)
 
 	dur = atof(argv[2]);
 	freq = atof(argv[3]);
-	twopi = 8 * atan(1.);
 	depth = atoi(argv[4]);
 	sr = atof(argv[5]);
 	end = (int)(dur*sr);
@@ -60,7 +61,7 @@ int main(int argc, char** argv)
 	fwrite(header, 1, sizeof(wavehead), fpout);
 
 	// #TODO call implementation here
-	
+
 	free(audioblock);
 	free(header);
 	fclose(fpout);
@@ -80,7 +81,6 @@ void modgen(int end, int blockframes, short* audioblock, int freq, int sr, int d
 						  //linear segments need to be
 	int sps = sr*(1 / freq);		//samples per cycle
 
-	double twopi = 8 * atan(1.);
 	int i, j, n, ndx = 0;
 
 	envelope(env, sr, dur);
@@ -90,7 +90,7 @@ void modgen(int end, int blockframes, short* audioblock, int freq, int sr, int d
 	{
 		for(j = 0; j < blockframes; j++, ndx++)
 		{
-			audioblock[j] = 0;//8000*sin(ndx*twopi*freq/sr);
+			audioblock[j] = 0;//8000*sin(ndx*TWO_PI*freq/sr);
 
 			for(int h = 1; h < 200; h++)
 			{ //this is adding sinudoidal harmonics
@@ -99,10 +99,11 @@ void modgen(int end, int blockframes, short* audioblock, int freq, int sr, int d
 					break;
 				}
 
-				audioblock[j] += 16000 * (1. / h)*sin((ndx*twopi*h*freq) / sr);
+				audioblock[j] += 16000 * (1. / h)*sin((ndx*TWO_PI*h*freq) / sr);
 			}
 			if(ndx >= dur*sr)
-			{ //this is ending the loop before it goes out of bounds
+			{ 
+				//this is ending the loop before it goes out of bounds
 				continue;
 			}
 			else
@@ -116,8 +117,6 @@ void modgen(int end, int blockframes, short* audioblock, int freq, int sr, int d
 }
 
 void breaks(float* plist, float* llist)
-//int end, int blockframes, 
-//		short* audioblock, int sr, int dur)
 {
 	bool flag = 0;
 	int freq;
@@ -132,9 +131,7 @@ void breaks(float* plist, float* llist)
 
 		printf("Input jump destination as a percentage of amplitude (0.-1.):");
 		scanf("%s", &llist);
-
 	}
-
 }
 
 void addsyn(int dur)
@@ -150,8 +147,6 @@ void addsyn(int dur)
 	carriergen(dur, harmnum, relamp);
 }
 
-// Function to generate the amplitude envelope.
-//will give an error if it is too long.
 void envelope(double *arr, int sr, int dur)
 {
 	int a, d, r;
@@ -203,12 +198,8 @@ void envelope(double *arr, int sr, int dur)
 	}
 }
 
-//function to generate the square wave.
-//will generate up to 200 harmonics, or until
-//it reaches the Nyquist frequency.
 void carriergen(int end, int blockframes, short* audioblock, int freq, int sr, int dur, double* env, int bd)
 {
-	double twopi = 8 * atan(1.);
 	int i, j, n, ndx = 0;
 	envelope(env, sr, dur);
 
@@ -216,7 +207,7 @@ void carriergen(int end, int blockframes, short* audioblock, int freq, int sr, i
 	{
 		for(j = 0; j < blockframes; j++, ndx++)
 		{
-			audioblock[j] = 0;//8000*sin(ndx*twopi*freq/sr);
+			audioblock[j] = 0;
 
 			for(int h = 1; h < 200; h++)
 			{
@@ -226,7 +217,7 @@ void carriergen(int end, int blockframes, short* audioblock, int freq, int sr, i
 					break;
 				}
 
-				audioblock[j] += 16000 * (1. / n)*sin((ndx*twopi*n*freq) / sr);
+				audioblock[j] += 16000 * (1. / n)*sin((ndx*TWO_PI*n*freq) / sr);
 			}
 			if(ndx >= dur*sr)
 			{
