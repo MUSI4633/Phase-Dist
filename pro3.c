@@ -16,7 +16,7 @@ FILE* fpout;
 const double TWO_PI = 2 * acos(-1);
 
 void modgen(int end, int blockframes, short* audioblock, int freq, int sr, int dur, double* env, int bd);
-void breaks(float* plist, float* llist);
+void breaks(float* pointList, float* levelList, int length);
 void addsyn(int dur);
 void envelope(double *arr, int sr, int dur);
 void carriergen(int end, int blockframes, short* audioblock, int freq, int sr, int dur, double* env, int bd);
@@ -52,11 +52,10 @@ int main(int argc, char** argv)
 	databytes = end * sizeof(short);
 
 	//allocate space for the envelope
-	double *env;
-	env = malloc(end * sizeof(double));
+	double* env = (double*)malloc(end * sizeof(double));
 
 	/* write the header */
-	header = (wavehead *)malloc(sizeof(wavehead));
+	header = (wavehead*)malloc(sizeof(wavehead));
 	update_header(header, sr, 1, 16, databytes);
 	fwrite(header, 1, sizeof(wavehead), fpout);
 
@@ -73,11 +72,12 @@ void modgen(int end, int blockframes, short* audioblock, int freq, int sr, int d
 {
 	int jnum;
 	printf("How many jumps would you like in the modulator signal?");
-	scanf("%d", jnum);
+	scanf("%i", &jnum);
 
-	float* llist[jnum], plist[jnum];
+	float* pointList = (float*)malloc(jnum * sizeof(float));
+	float* levelList = (float*)malloc(jnum * sizeof(float));
 
-	breaks(plist, llist); //we need to calculate, based on samplerate, how steep the
+	breaks(pointList, levelList, jnum); //we need to calculate, based on samplerate, how steep the
 						  //linear segments need to be
 	int sps = sr*(1 / freq);		//samples per cycle
 
@@ -116,21 +116,21 @@ void modgen(int end, int blockframes, short* audioblock, int freq, int sr, int d
 	}
 }
 
-void breaks(float* plist, float* llist)
+void breaks(float* pointList, float* levelList, int length)
 {
 	bool flag = 0;
 	int freq;
 
 	printf("Input phasor frequency:");
-	scanf("%d", freq);
+	scanf("%i", &freq);
 
-	for(int i < sizeof(&plist); i = 0; i++)
+	for(int i = 0; i < length; i++)
 	{
 		printf("Input next jump point as a percentage of phase (0.-1.):");
-		scanf("%s", &plist);
+		scanf("%f", &pointList[i]);
 
 		printf("Input jump destination as a percentage of amplitude (0.-1.):");
-		scanf("%s", &llist);
+		scanf("%f", &levelList[i]);
 	}
 }
 
@@ -144,7 +144,8 @@ void addsyn(int dur)
 	printf("Choose the relative harmonic strength:\n 1. 1/n\n 2. 1/n^2\n 3.sqrt(n) (normalised)\n");
 	scanf("%d", &relamp);
 
-	carriergen(dur, harmnum, relamp);
+	// #TODO fix me
+	// carriergen(dur, harmnum, relamp);
 }
 
 void envelope(double *arr, int sr, int dur)
