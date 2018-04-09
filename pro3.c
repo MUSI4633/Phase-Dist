@@ -20,6 +20,8 @@ void breaks(float* pointList, float* levelList, int length);
 void addsyn(int dur);
 void envelope(double *arr, int sr, int dur);
 void carriergen(int end, int blockframes, short* audioblock, int freq, int sr, int dur, double* env, int bd);
+float slope(float pointList, float levelList);
+void linsegs(float pointList, float levelList, float* wave, float slope, int length, int spc);
 
 int main(int argc, char** argv)
 {
@@ -232,6 +234,27 @@ void carriergen(int end, int blockframes, short* audioblock, int freq, int sr, i
 		fwrite(audioblock, sizeof(short), blockframes, fpout);
 	}
 }
+
+float slope(float llist){
+
+	float slope =1.;
+	for(int i < sizeof(llist);i=0;i++){
+		slope+=llist[i];
+	}
+	return slope;
+}
+
+void linsegs(float pointList, float levelList, float* wave, float slope, int length, int spc){
+
+	int j=0;
+
+	for(int i=0;i<length;i++){
+		for(j<spc;j=j;j++){
+
+		}
+	}
+}
+
 
 void update_header(wavehead* header, int sr, int channels, int precision, int databytes)
 {
