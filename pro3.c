@@ -76,17 +76,22 @@ void modgen(int end, int blockframes, short* audioblock, int freq, int sr, int d
 	printf("How many jumps would you like in the modulator signal?");
 	scanf("%i", &jnum);
 
+	int spc = sr*freq; //samples per cycle
+	int cycleLength = sr*dur;
+
+	float* wave = (float*)malloc(spc * sizeof(float));		//array of one phasor cycle
 	float* pointList = (float*)malloc(jnum * sizeof(float));
 	float* levelList = (float*)malloc(jnum * sizeof(float));
 
-	breaks(pointList, levelList, jnum); //we need to calculate, based on samplerate, how steep the
-						  //linear segments need to be
-	int sps = sr*(1 / freq);		//samples per cycle
+	breaks(pointList, levelList, jnum);
+	linsegs(&pointList, &levelList, wave, slope(levelList), cycleLength, spc);
+						  
+	
 
 	int i, j, n, ndx = 0;
 
-	envelope(env, sr, dur);
-
+	envelope(env, sr, dur);	// **** We can either keep this as an envelope
+							// or replace it with an LFO when we get to that point ***
 	// experimenting with new write function here
 	for(i = 0; i < end; i += blockframes)
 	{
@@ -112,13 +117,13 @@ void modgen(int end, int blockframes, short* audioblock, int freq, int sr, int d
 			{
 				audioblock[j] *= env[ndx];
 			}
-
 		}
 		fwrite(audioblock, sizeof(short), blockframes, fpout);
 	}
 }
 
 void breaks(float* pointList, float* levelList, int length)
+//This is the menu for the number of jumps the user wants in the modulator
 {
 	bool flag = 0;
 	int freq;
@@ -126,8 +131,7 @@ void breaks(float* pointList, float* levelList, int length)
 	printf("Input phasor frequency:");
 	scanf("%i", &freq);
 
-	for(int i = 0; i < length; i++)
-	{
+	for(int i = 0; i < length; i++){	
 		printf("Input next jump point as a percentage of phase (0.-1.):");
 		scanf("%f", &pointList[i]);
 
@@ -244,15 +248,34 @@ float slope(float llist){
 	return slope;
 }
 
-void linsegs(float pointList, float levelList, float* wave, float slope, int length, int spc){
+//this is generating ONE CYCLE of the inverted phasor wave to be mixed in
+void linsegs(float pointList, float levelList, float* wave, float slope, int cycleLength, int spc){
 
+	
+	//converting the phase points into sample numbers
+	for(int i<sizeof(pointList);i=0;i++){
+		pointList[i] = (int) pointList[i]*spc;
+	}
+	//writing the wave to the array
 	int j=0;
-
-	for(int i=0;i<length;i++){
-		for(j<spc;j=j;j++){
-
+	for(int i=0;i<spc;i++){
+		if(i<pointList[j]){
+			wave[i]= i*slope;
+		}
+		else{
+			wave[i] = levelList[i]
+			j++;
 		}
 	}
+
+	//if you decide you want to use the actual wve instead of just the
+	//arrays to trigger the reset, we can take this part out.
+	//I'm inverting the wave here so it can be mixed in.
+
+	for(int i<sizeof(wave);i=0;i++){
+		wave[i] = wave[i]*-1. + 1
+	}
+
 }
 
 
