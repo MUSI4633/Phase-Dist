@@ -71,8 +71,8 @@ int main(int argc, char** argv)
 	{
 		for(j = 0; j < blockframes; j++, adsrIndex++, phaseIndex++)
 		{
-			audioblock[j] = (invertedBaseFreqTable[phaseIndex % samplesInBaseFrequencyPeriod] / 16000) *
-				(phasorFreqTable[phaseIndex % samplesInPhasorFrequencyPeriod]);
+			audioblock[j] = (invertedBaseFreqTable[phaseIndex % samplesInBaseFrequencyPeriod]) *
+				(phasorFreqTable[phaseIndex % samplesInPhasorFrequencyPeriod])*16000;
 
 			if(phaseIndex >= samplesInBaseFrequencyPeriod)
 			{
@@ -181,10 +181,10 @@ void modulator(double* invertedBaseFreqTable, int sr, int freq, int samplesInBas
 			}
 			
 			// Sawtooth wave 
-			sample += 16000 * pow(-1, (n + 1)) / n * sin(phaseIndex * TWO_PI * n * freq / sr);
+			sample += pow(-1, (n + 1)) / n * sin(phaseIndex * TWO_PI * n * freq / sr);
 		}
 
-		invertedBaseFreqTable[phaseIndex] = ((-1 * sample) + 16000) / 2;
+		invertedBaseFreqTable[phaseIndex] = ((-1 * sample)+1.)/2. ;
 	}
 }
 
@@ -192,7 +192,7 @@ void carrier(double *arr, int sr, int phasorFreq, int samplesInPhasorFrequencyPe
 {
 	for(int i = 0; i < samplesInPhasorFrequencyPeriod; i++)
 	{
-		arr[i] = 16000 * sin(i*(TWO_PI/samplesInPhasorFrequencyPeriod));
+		arr[i] = sin(i*(TWO_PI/samplesInPhasorFrequencyPeriod));
 	}
 }
 
