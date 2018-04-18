@@ -1,9 +1,7 @@
-///Project 3: Audio Software Development
-///Keegan Herperger 001180181
-///Program to generate a tone in one of three wavehapes, with ADSR amplitude envelope.
-///
-///I couldn't get bit depth working; it changes the length of the file.
-///A bit-depth of 16 will give the correct lengtht though.
+// MUSI4633 - Final Project - Phase Distortion Synthesis
+// Professor: Georg Boenn
+// By: Alex Hochheiden & Keegan Herperger
+// Spring 2018
 
 #include <math.h>
 #include <stdio.h> 
@@ -12,43 +10,42 @@
 #include "wave.h"  /* header file containing the wavehead struc 
 					  and the declaration of update_header() */
 FILE* fpout;
-
 const double TWO_PI = 2 * acos(-1);
 
-void modgen(int end, int blockframes, short* audioblock, int freq, int sr, int dur, double* env, int bd);
-void breaks(float* pointList, float* levelList, int length);
-void addsyn(int dur);
 void envelope(double *arr, int sr, int dur);
-void carriergen(int end, int blockframes, short* audioblock, int freq, int sr, int dur, double* env, int bd);
-float slope(float pointList, float levelList);
-void linsegs(float pointList, float levelList, float* wave, float slope, int length, int spc);
+//void carriergen(int end, int blockframes, short* audioblock, int freq, int sr, int dur, double* env, int bd);
+//void modgen(int end, int blockframes, short* audioblock, int freq, int sr, int dur, double* env, int bd);
+//void breaks(float* pointList, float* levelList, int length);
+//void addsyn(int dur);
 
 int main(int argc, char** argv)
 {
 	short  *audioblock;      /* audio memory pointer */
-	int     end, i, j;       /* dur in frames, counter vars */
+	int     end, i, j, n;       /* dur in frames, counter vars */
 	int     sr = 44100;      /* sampling rate */
 	int     blockframes = 256; /* audio block size in frames */
 	int     databytes;  /* audio data in bytes */
-	unsigned int ndx = 0;   /* phase index for synthesis */
-	float   dur, freq, sustain; /* duration, frequency, sustain */
+	unsigned int ndx = 0, adsrIndex = 0;   /* phase index for synthesis */
+	float   dur, freq, phasorFreq, sustain, prevBaseFrequencyCounter; /* duration, frequency, phasor frequency, sustain */
 	int attack, decay, release, depth, shape;   /* attack, decay, release, bit-depth, shape*/
 
 	wavehead *header;
 
 	if(argc != 6)
 	{
-		printf("usage: %s outfile dur freq bit-depth samplerate\n", argv[0]);
+		printf("usage: %s outfile dur freq phasorFreq bit-depth samplerate\n", argv[0]);
 		exit(-1);
 	}
 
+	fpout = fopen(argv[1], "wb");
 	dur = atof(argv[2]);
 	freq = atof(argv[3]);
-	depth = atoi(argv[4]);
-	sr = atof(argv[5]);
+	phasorFreq = atof(argv[4]);
+	depth = atoi(argv[5]);
+	sr = atof(argv[6]);
 	end = (int)(dur*sr);
-	fpout = fopen(argv[1], "wb");
 	audioblock = (short *)malloc(sizeof(short)*blockframes);
+	prevBaseFrequencyCounter = -999;
 
 	/* set the data size */
 	databytes = end * sizeof(short);
@@ -61,97 +58,59 @@ int main(int argc, char** argv)
 	update_header(header, sr, 1, 16, databytes);
 	fwrite(header, 1, sizeof(wavehead), fpout);
 
-	// #TODO call implementation here
+	// adsr
+	envelope(env, sr, dur);
+
+	for(i = 0; i < end; i += blockframes)
+	{
+		for(j = 0; j < blockframes; j++, ndx++, adsrIndex++)
+		{
+			float baseFrequencyCounter = 0;
+			audioblock[j] = 0;
+			
+			for(int n = 1; n < 100; n ++)
+			{
+				if(n * freq >= sr / 2)	
+				{ 
+					// nyquist frequency check
+					break;
+				}
+
+				// both sawtooth?
+				baseFrequencyCounter += 16000 * pow(-1, (n + 1)) / n * sin(ndx * TWO_PI * n * freq / sr);
+				audioblock[j] = 16000 * pow(-1, (n + 1)) / n * sin(ndx * TWO_PI * n * phasorFreq / sr);
+			}
+
+			if(ndx >= dur*sr)
+			{
+				break;
+			}
+			else
+			{
+				audioblock[j] *= (-baseFrequencyCounter) * env[adsrIndex];
+
+				// make sure this works, should reset after the drop at the end of a sawtooth wave
+				if(baseFrequencyCounter > prevBaseFrequencyCounter)
+				{
+					prevBaseFrequencyCounter = baseFrequencyCounter;
+					continue;
+				}
+				else
+				{
+					// reset phase on end of base frequency period
+					ndx = 0;
+					prevBaseFrequencyCounter = -999;
+				}				 
+			}
+		}
+		fwrite(audioblock, sizeof(short), blockframes, fpout);
+	}
 
 	free(audioblock);
 	free(header);
 	fclose(fpout);
 
 	return 0;
-}
-
-void modgen(int end, int blockframes, short* audioblock, int freq, int sr, int dur, double* env, int bd)
-{
-	int jnum;
-	printf("How many jumps would you like in the modulator signal?");
-	scanf("%i", &jnum);
-
-	int spc = sr*freq; //samples per cycle
-	int cycleLength = sr*dur;
-
-	float* wave = (float*)malloc(spc * sizeof(float));		//array of one phasor cycle
-	float* pointList = (float*)malloc(jnum * sizeof(float));
-	float* levelList = (float*)malloc(jnum * sizeof(float));
-
-	breaks(pointList, levelList, jnum);
-	linsegs(&pointList, &levelList, wave, slope(levelList), cycleLength, spc);
-						  
-	
-
-	int i, j, n, ndx = 0;
-
-	envelope(env, sr, dur);	// **** We can either keep this as an envelope
-							// or replace it with an LFO when we get to that point ***
-	// experimenting with new write function here
-	for(i = 0; i < end; i += blockframes)
-	{
-		for(j = 0; j < blockframes; j++, ndx++)
-		{
-			audioblock[j] = 0;//8000*sin(ndx*TWO_PI*freq/sr);
-
-			for(int h = 1; h < 200; h++)
-			{ //this is adding sinudoidal harmonics
-				if(h*freq >= sr / 2)
-				{ //nyquist frequency check
-					break;
-				}
-
-				audioblock[j] += 16000 * (1. / h)*sin((ndx*TWO_PI*h*freq) / sr);
-			}
-			if(ndx >= dur*sr)
-			{ 
-				//this is ending the loop before it goes out of bounds
-				continue;
-			}
-			else
-			{
-				audioblock[j] *= env[ndx];
-			}
-		}
-		fwrite(audioblock, sizeof(short), blockframes, fpout);
-	}
-}
-
-void breaks(float* pointList, float* levelList, int length)
-//This is the menu for the number of jumps the user wants in the modulator
-{
-	bool flag = 0;
-	int freq;
-
-	printf("Input phasor frequency:");
-	scanf("%i", &freq);
-
-	for(int i = 0; i < length; i++){	
-		printf("Input next jump point as a percentage of phase (0.-1.):");
-		scanf("%f", &pointList[i]);
-
-		printf("Input jump destination as a percentage of amplitude (0.-1.):");
-		scanf("%f", &levelList[i]);
-	}
-}
-
-void addsyn(int dur)
-{
-	int harmnum, relamp;
-
-	printf("How many harmonics would you like in the carrier?");
-	scanf("%d", &harmnum);
-
-	printf("Choose the relative harmonic strength:\n 1. 1/n\n 2. 1/n^2\n 3.sqrt(n) (normalised)\n");
-	scanf("%d", &relamp);
-
-	// #TODO fix me
-	// carriergen(dur, harmnum, relamp);
 }
 
 void envelope(double *arr, int sr, int dur)
@@ -205,6 +164,88 @@ void envelope(double *arr, int sr, int dur)
 	}
 }
 
+/*
+void modgen(int end, int blockframes, short* audioblock, int freq, int sr, int dur, double* env, int bd)
+{
+	int jnum;
+	printf("How many jumps would you like in the modulator signal?");
+	scanf("%i", &jnum);
+
+	int spc = sr*freq; //samples per cycle
+	int cycleLength = sr*dur;
+
+	float* wave = (float*)malloc(spc * sizeof(float));		//array of one phasor cycle
+	float* pointList = (float*)malloc(jnum * sizeof(float));
+	float* levelList = (float*)malloc(jnum * sizeof(float));
+
+	breaks(pointList, levelList, jnum);
+	linsegs(&pointList, &levelList, wave, slope(levelList), cycleLength, spc);
+
+	envelope(env, sr, dur);	// **** We can either keep this as an envelope
+							// or replace it with an LFO when we get to that point ***
+	// experimenting with new write function here
+	for(i = 0; i < end; i += blockframes)
+	{
+		for(j = 0; j < blockframes; j++, ndx++)
+		{
+			audioblock[j] = 0;//8000*sin(ndx*TWO_PI*freq/sr);
+
+			for(int n = 1; n < 200; n += 2)
+			{ //this is adding sinudoidal harmonics
+				if(n*freq >= sr / 2)
+				{ //nyquist frequency check
+					break;
+				}
+
+				audioblock[j] += 16000 * (1. / n)*sin((ndx*TWO_PI*n*freq) / sr);
+			}
+
+			if(ndx >= dur*sr)
+			{ 
+				//this is ending the loop before it goes out of bounds
+				continue;
+			}
+			else
+			{
+				audioblock[j] *= env[ndx];
+			}
+		}
+		fwrite(audioblock, sizeof(short), blockframes, fpout);
+	}
+}
+
+void breaks(float* pointList, float* levelList, int length)
+//This is the menu for the number of jumps the user wants in the modulator
+{
+	bool flag = 0;
+	int freq;
+
+	printf("Input phasor frequency:");
+	scanf("%i", &freq);
+
+	for(int i = 0; i < length; i++){	
+		printf("Input next jump point as a percentage of phase (0.-1.):");
+		scanf("%f", &pointList[i]);
+
+		printf("Input jump destination as a percentage of amplitude (0.-1.):");
+		scanf("%f", &levelList[i]);
+	}
+}
+
+void addsyn(int dur)
+{
+	int harmnum, relamp;
+
+	printf("How many harmonics would you like in the carrier?");
+	scanf("%d", &harmnum);
+
+	printf("Choose the relative harmonic strength:\n 1. 1/n\n 2. 1/n^2\n 3.sqrt(n) (normalised)\n");
+	scanf("%d", &relamp);
+
+	// #TODO fix me
+	// carriergen(dur, harmnum, relamp);
+}
+
 void carriergen(int end, int blockframes, short* audioblock, int freq, int sr, int dur, double* env, int bd)
 {
 	int i, j, n, ndx = 0;
@@ -238,46 +279,7 @@ void carriergen(int end, int blockframes, short* audioblock, int freq, int sr, i
 		fwrite(audioblock, sizeof(short), blockframes, fpout);
 	}
 }
-
-float slope(float llist){
-
-	float slope =1.;
-	for(int i < sizeof(llist);i=0;i++){
-		slope+=llist[i];
-	}
-	return slope;
-}
-
-//this is generating ONE CYCLE of the inverted phasor wave to be mixed in
-void linsegs(float pointList, float levelList, float* wave, float slope, int cycleLength, int spc){
-
-	
-	//converting the phase points into sample numbers
-	for(int i<sizeof(pointList);i=0;i++){
-		pointList[i] = (int) pointList[i]*spc;
-	}
-	//writing the wave to the array
-	int j=0;
-	for(int i=0;i<spc;i++){
-		if(i<pointList[j]){
-			wave[i]= i*slope;
-		}
-		else{
-			wave[i] = levelList[i]
-			j++;
-		}
-	}
-
-	//if you decide you want to use the actual wve instead of just the
-	//arrays to trigger the reset, we can take this part out.
-	//I'm inverting the wave here so it can be mixed in.
-
-	for(int i<sizeof(wave);i=0;i++){
-		wave[i] = wave[i]*-1. + 1
-	}
-
-}
-
+*/
 
 void update_header(wavehead* header, int sr, int channels, int precision, int databytes)
 {
