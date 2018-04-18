@@ -81,7 +81,8 @@ int main(int argc, char** argv)
 				audioblock[j] += 16000 * pow(-1, (n + 1)) / n * sin(ndx * TWO_PI * n * phasorFreq / sr);
 			}
 
-			if(ndx >= dur*sr)
+			// bounds checking
+			if(adsrIndex >= end)
 			{
 				break;
 			}
