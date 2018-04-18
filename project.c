@@ -1,16 +1,16 @@
-// MUSI4633 - Final Project - Phase Distortion Synthesis
+// Course: MUSI4633 
+// Project: Final Project - Phase Distortion Synthesis
 // Professor: Georg Boenn
 // By: Alex Hochheiden & Keegan Herperger
-// Spring 2018
+// Semester: Spring 2018
 
-#include <math.h>
+#include <math.h> 
 #include <stdio.h> 
 #include <stdlib.h>
 #include <string.h>
 #include "wave.h"  /* header file containing the wavehead struc 
 					  and the declaration of update_header() */
 FILE* fpout;
-const double TWO_PI = 2 * acos(-1);
 
 void envelope(double *arr, int sr, int dur);
 //void carriergen(int end, int blockframes, short* audioblock, int freq, int sr, int dur, double* env, int bd);
@@ -20,20 +20,21 @@ void envelope(double *arr, int sr, int dur);
 
 int main(int argc, char** argv)
 {
-	short  *audioblock;      /* audio memory pointer */
+	short   *audioblock;      /* audio memory pointer */
 	int     end, i, j, n;       /* dur in frames, counter vars */
 	int     sr = 44100;      /* sampling rate */
 	int     blockframes = 256; /* audio block size in frames */
 	int     databytes;  /* audio data in bytes */
 	unsigned int ndx = 0, adsrIndex = 0;   /* phase index for synthesis */
+	const double TWO_PI = 2 * acos(-1);
 	float   dur, freq, phasorFreq, sustain, prevBaseFrequencyCounter; /* duration, frequency, phasor frequency, sustain */
 	int attack, decay, release, depth, shape;   /* attack, decay, release, bit-depth, shape*/
 
 	wavehead *header;
 
-	if(argc != 6)
+	if(argc != 7)
 	{
-		printf("usage: %s outfile dur freq phasorFreq bit-depth samplerate\n", argv[0]);
+		printf("usage: %s outfile dur freq phasorFreq bit-depth sampleRate\n", argv[0]);
 		exit(-1);
 	}
 
@@ -45,7 +46,6 @@ int main(int argc, char** argv)
 	sr = atof(argv[6]);
 	end = (int)(dur*sr);
 	audioblock = (short *)malloc(sizeof(short)*blockframes);
-	prevBaseFrequencyCounter = -999;
 
 	/* set the data size */
 	databytes = end * sizeof(short);
@@ -78,7 +78,7 @@ int main(int argc, char** argv)
 
 				// both sawtooth?
 				baseFrequencyCounter += 16000 * pow(-1, (n + 1)) / n * sin(ndx * TWO_PI * n * freq / sr);
-				audioblock[j] = 16000 * pow(-1, (n + 1)) / n * sin(ndx * TWO_PI * n * phasorFreq / sr);
+				audioblock[j] += 16000 * pow(-1, (n + 1)) / n * sin(ndx * TWO_PI * n * phasorFreq / sr);
 			}
 
 			if(ndx >= dur*sr)
@@ -87,20 +87,19 @@ int main(int argc, char** argv)
 			}
 			else
 			{
-				audioblock[j] *= (-baseFrequencyCounter) * env[adsrIndex];
+				// #TODO fix adsr envelope
+				audioblock[j] *= (-baseFrequencyCounter);// * env[adsrIndex];
 
-				// make sure this works, should reset after the drop at the end of a sawtooth wave
-				if(baseFrequencyCounter > prevBaseFrequencyCounter)
+				// one full period has passed
+				if(ndx < sr/freq)
 				{
-					prevBaseFrequencyCounter = baseFrequencyCounter;
 					continue;
 				}
 				else
 				{
 					// reset phase on end of base frequency period
 					ndx = 0;
-					prevBaseFrequencyCounter = -999;
-				}				 
+				}		 
 			}
 		}
 		fwrite(audioblock, sizeof(short), blockframes, fpout);
