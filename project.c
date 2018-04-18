@@ -138,26 +138,26 @@ void envelope(double *arr, int sr, int dur)
 	}
 	else
 	{
-		double inc = 1. / (period*a);
+		double increment = 1. / (period*a);
 		for(int i = 0; i < period*a; i++)
 		{
-			arr[i] = inc*i;
+			arr[i] = increment*i;
 		}
 
-		inc = (1. - s) / (period*d);
-		for(int i = period*(a + d); i > period*a; i--)
+		increment = (1. - s) / (period*d);
+		for(int i = period*a; i < period*(a+d); i++)
 		{
-			arr[i] = 1. - (inc*i);
+			arr[i] = 1. - (increment*(i-(period*a)));
 		}
-		for(int i = period*d; i < (sr*dur - period*r); i++)
+		for(int i = period*(d+a); i < (sr*dur - period*r); i++)
 		{
 			arr[i] = s;
 		}
 
-		inc = s / (period*r);
+		increment = s / (period*r);
 		for(int i = period*r; i > 0; i--)
 		{
-			arr[sr*dur - i] = inc*i;
+			arr[sr*dur - i] = increment*i;
 		}
 	}
 }
