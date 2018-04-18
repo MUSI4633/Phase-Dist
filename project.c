@@ -12,15 +12,15 @@
 					  and the declaration of update_header() */
 FILE* fpout;
 
-void modulator(double* baseFreqTable, int sr, int dur, int freq, int samplesInBaseFrequencyPeriod, double TWO_PI);
 void envelope(double *arr, int sr, int dur);
-void carrier(double *arr, int sr, int dur, int freq);
+void modulator(double* baseFreqTable, int sr, int freq, int samplesInBaseFrequencyPeriod, double TWO_PI);
+void carrier(double *arr, int sr, int phasorFreq, int samplesInPhasorFrequencyPeriod, double TWO_PI);
 
 int main(int argc, char** argv)
 {
 	short   *audioblock;      /* audio memory pointer */
 	int     end, i, j, n;       /* dur in frames, counter vars */
-	int     sr = 44100, samplesInBaseFrequencyPeriod = 0;      /* sampling rate, number of samples in a full cycle at the base frequency */
+	int     sr = 44100, samplesInBaseFrequencyPeriod = 0, samplesInPhasorFrequencyPeriod = 0;      /* sampling rate, number of samples in a full cycle at the base frequency */
 	int     blockframes = 256; /* audio block size in frames */
 	int     databytes;  /* audio data in bytes */
 	int     channels = 1;
@@ -44,6 +44,7 @@ int main(int argc, char** argv)
 	sr = atof(argv[5]);
 	end = (int)(dur*sr);
 	samplesInBaseFrequencyPeriod = (int)(sr/freq);
+	samplesInPhasorFrequencyPeriod = (int)(sr/phasorFreq);
 	audioblock = (short *)malloc(sizeof(short)*blockframes);
 
 	/* set the data size */
@@ -61,14 +62,17 @@ int main(int argc, char** argv)
 	envelope(env, sr, dur);
 
 	double* baseFreqTable = (double*)malloc(samplesInBaseFrequencyPeriod * sizeof(double));
+	double* phasorFreqTable = (double*)malloc(samplesInPhasorFrequencyPeriod * sizeof(double));
 
-	modulator(baseFreqTable, sr, dur, freq, samplesInBaseFrequencyPeriod, TWO_PI);
+	modulator(baseFreqTable, sr, freq, samplesInBaseFrequencyPeriod, TWO_PI);
+	carrier(phasorFreqTable, sr, phasorFreq, samplesInPhasorFrequencyPeriod, TWO_PI);
 
 	for(i = 0; i < end; i += blockframes)
 	{
 		for(j = 0; j < blockframes; j++, adsrIndex++)
 		{
-			audioblock[j] = baseFreqTable[adsrIndex % samplesInBaseFrequencyPeriod];
+			audioblock[j] = (baseFreqTable[adsrIndex % samplesInBaseFrequencyPeriod] / 16000) *
+				(-phasorFreqTable[adsrIndex % samplesInPhasorFrequencyPeriod]);
 
 			// fills the rest of the file with 0's so the audio ends at
 			// the end of the last wave that has completed the full wave/period/cycle
@@ -99,28 +103,6 @@ int main(int argc, char** argv)
 	fclose(fpout);
 
 	return 0;
-}
-
-void modulator(double* baseFreqTable, int sr, int dur, int freq, int samplesInBaseFrequencyPeriod, double TWO_PI)
-{
-	for(int phaseIndex = 0; phaseIndex < samplesInBaseFrequencyPeriod; phaseIndex++)
-	{
-		double sample = 0;
-
-		for(int n = 1; n < 100; n++)
-		{
-			if(n * freq >= sr / 2)	
-			{ 
-				// nyquist frequency check
-				break;
-			}
-			
-			// Sawtooth wave 
-			sample += 16000 * pow(-1, (n + 1)) / n * sin(phaseIndex * TWO_PI * n * freq / sr);
-		}
-
-		baseFreqTable[phaseIndex] = sample;
-	}
 }
 
 // This function creates the ADSR envelope. The array
@@ -179,21 +161,34 @@ void envelope(double *arr, int sr, int dur)
 	}
 }
 
-void carrier(double *arr, int sr, int dur, int freq, float TWO_PI){
+void modulator(double* baseFreqTable, int sr, int freq, int samplesInBaseFrequencyPeriod, double TWO_PI)
+{
+	for(int phaseIndex = 0; phaseIndex < samplesInBaseFrequencyPeriod; phaseIndex++)
+	{
+		double sample = 0;
 
-	length = sr*dur;
-	sampPerCycle = sr/freq;
+		for(int n = 1; n < 100; n++)
+		{
+			if(n * freq >= sr / 2)	
+			{ 
+				// nyquist frequency check
+				break;
+			}
+			
+			// Sawtooth wave 
+			sample += 16000 * pow(-1, (n + 1)) / n * sin(phaseIndex * TWO_PI * n * freq / sr);
+		}
 
-	double* wave = (double*)malloc(sampPerCycle * sizeof(double));
-
-	for(int i = 0;i<sampPerCycle;i++){
-		wave[i]=sin(i*(TWO_PI/sampPerCycle));
+		baseFreqTable[phaseIndex] = sample;
 	}
+}
 
-	for(int i=0;i<length;i++){
-		arr[i] = wave[i%sampPerCycle];
+void carrier(double *arr, int sr, int phasorFreq, int samplesInPhasorFrequencyPeriod, double TWO_PI)
+{
+	for(int i = 0; i < samplesInPhasorFrequencyPeriod; i++)
+	{
+		arr[i] = 16000 * sin(i*(TWO_PI/samplesInPhasorFrequencyPeriod));
 	}
-return;
 }
 
 // This functon call creates the header for a .wav file
