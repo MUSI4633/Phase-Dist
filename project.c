@@ -13,28 +13,25 @@
 FILE* fpout;
 
 void envelope(double *arr, int sr, int dur);
-//void carriergen(int end, int blockframes, short* audioblock, int freq, int sr, int dur, double* env, int bd);
-//void modgen(int end, int blockframes, short* audioblock, int freq, int sr, int dur, double* env, int bd);
-//void breaks(float* pointList, float* levelList, int length);
-//void addsyn(int dur);
 
 int main(int argc, char** argv)
 {
 	short   *audioblock;      /* audio memory pointer */
 	int     end, i, j, n;       /* dur in frames, counter vars */
-	int     sr = 44100;      /* sampling rate */
+	int     sr = 44100, samplesInBaseFrequencyPeriod = 0;      /* sampling rate, number of samples in a full cycle at the base frequency */
 	int     blockframes = 256; /* audio block size in frames */
 	int     databytes;  /* audio data in bytes */
-	unsigned int ndx = 0, adsrIndex = 0;   /* phase index for synthesis */
+	int     channels = 1;
+	unsigned int phaseIndex = 0, adsrIndex = 0;   /* phase index for synthesis, cumulativep hase index used by adsr envelope */
 	const double TWO_PI = 2 * acos(-1);
-	float   dur, freq, phasorFreq, sustain, prevBaseFrequencyCounter; /* duration, frequency, phasor frequency, sustain */
-	int attack, decay, release, depth, shape;   /* attack, decay, release, bit-depth, shape*/
+	float   dur, freq, phasorFreq, sustain; /* duration, frequency, phasor frequency, sustain */
+	int attack, decay, release, depth = 16;   /* attack, decay, release, bit-depth*/
 
 	wavehead *header;
 
-	if(argc != 7)
+	if(argc != 6)
 	{
-		printf("usage: %s outfile dur freq phasorFreq bit-depth sampleRate\n", argv[0]);
+		printf("usage: %s outfile dur freq phasorFreq sampleRate\n", argv[0]);
 		exit(-1);
 	}
 
@@ -42,20 +39,20 @@ int main(int argc, char** argv)
 	dur = atof(argv[2]);
 	freq = atof(argv[3]);
 	phasorFreq = atof(argv[4]);
-	depth = atoi(argv[5]);
-	sr = atof(argv[6]);
+	sr = atof(argv[5]);
 	end = (int)(dur*sr);
+	samplesInBaseFrequencyPeriod = (int)(sr/freq);
 	audioblock = (short *)malloc(sizeof(short)*blockframes);
 
 	/* set the data size */
-	databytes = end * sizeof(short);
+	databytes = end * channels * sizeof(short);
 
 	//allocate space for the envelope
 	double* env = (double*)malloc(end * sizeof(double));
 
 	/* write the header */
 	header = (wavehead*)malloc(sizeof(wavehead));
-	update_header(header, sr, 1, 16, databytes);
+	update_header(header, sr, channels, 16, databytes);
 	fwrite(header, 1, sizeof(wavehead), fpout);
 
 	// adsr
@@ -63,11 +60,11 @@ int main(int argc, char** argv)
 
 	for(i = 0; i < end; i += blockframes)
 	{
-		for(j = 0; j < blockframes; j++, ndx++, adsrIndex++)
+		for(j = 0; j < blockframes; j++, phaseIndex++, adsrIndex++)
 		{
 			float baseFrequencyCounter = 0;
 			audioblock[j] = 0;
-			
+
 			for(int n = 1; n < 100; n ++)
 			{
 				if(n * freq >= sr / 2)	
@@ -76,36 +73,41 @@ int main(int argc, char** argv)
 					break;
 				}
 
-				// both sawtooth?
-				baseFrequencyCounter += 16000 * pow(-1, (n + 1)) / n * sin(ndx * TWO_PI * n * freq / sr);
-				audioblock[j] += 16000 * pow(-1, (n + 1)) / n * sin(ndx * TWO_PI * n * phasorFreq / sr);
+				// Sawtooth wave 
+				//baseFrequencyCounter += 16000 * pow(-1, (n + 1)) / n * sin(phaseIndex * TWO_PI * n * phasorFreq / sr);
+				audioblock[j] += 16000 * pow(-1, (n + 1)) / n * sin(phaseIndex * TWO_PI * n * phasorFreq / sr);
 			}
+	
+			// #TODO fix adsr envelope
+			//audioblock[j] *= (-baseFrequencyCounter);// * env[adsrIndex];
 
-			// bounds checking
-			if(adsrIndex >= end)
+			// if one full base frequency period has passed
+			if(phaseIndex >= samplesInBaseFrequencyPeriod)
 			{
-				break;
-			}
-			else
-			{
-				// #TODO fix adsr envelope
-				audioblock[j] *= (-baseFrequencyCounter);// * env[adsrIndex];
+				// reset the phase index
+				phaseIndex = 0;
 
-				// one full period has passed
-				if(ndx < sr/freq)
+				// fills the rest of the file with 0's so the audio ends at
+				// the end of the last wave that has completed the full wave/period/cycle
+				if((adsrIndex + samplesInBaseFrequencyPeriod) > end)
 				{
-					continue;
+					for(; j < blockframes; j++)
+					{
+						audioblock[j] = 0;
+					}
 				}
-				else
-				{
-					// reset phase on end of base frequency period
-					ndx = 0;
-				}		 
-			}
+			}	 		
 		}
+		// Append the created block to the .wav file
+		// (Blocks are just an arbitrary number of samples, they
+		// are not necessarily the start or the end of any wave)
 		fwrite(audioblock, sizeof(short), blockframes, fpout);
 	}
 
+	// Prevent memory leaks and close the output .wav file
+	// Memory leak prevention isn't strictly necessary, as
+	// the program terminates right after and would thus free
+	// the allocated memory, but it's a good habit none-the-less
 	free(audioblock);
 	free(header);
 	fclose(fpout);
@@ -113,6 +115,11 @@ int main(int argc, char** argv)
 	return 0;
 }
 
+// This function creates the ADSR envelope. The array
+// contains a value corresponding to the volume for the
+// sample at a particular index. The index represents
+// time that has elapsed, or in other words, the number
+// of samples that have passed.
 void envelope(double *arr, int sr, int dur)
 {
 	int a, d, r;
@@ -164,123 +171,10 @@ void envelope(double *arr, int sr, int dur)
 	}
 }
 
-/*
-void modgen(int end, int blockframes, short* audioblock, int freq, int sr, int dur, double* env, int bd)
-{
-	int jnum;
-	printf("How many jumps would you like in the modulator signal?");
-	scanf("%i", &jnum);
-
-	int spc = sr*freq; //samples per cycle
-	int cycleLength = sr*dur;
-
-	float* wave = (float*)malloc(spc * sizeof(float));		//array of one phasor cycle
-	float* pointList = (float*)malloc(jnum * sizeof(float));
-	float* levelList = (float*)malloc(jnum * sizeof(float));
-
-	breaks(pointList, levelList, jnum);
-	linsegs(&pointList, &levelList, wave, slope(levelList), cycleLength, spc);
-
-	envelope(env, sr, dur);	// **** We can either keep this as an envelope
-							// or replace it with an LFO when we get to that point ***
-	// experimenting with new write function here
-	for(i = 0; i < end; i += blockframes)
-	{
-		for(j = 0; j < blockframes; j++, ndx++)
-		{
-			audioblock[j] = 0;//8000*sin(ndx*TWO_PI*freq/sr);
-
-			for(int n = 1; n < 200; n += 2)
-			{ //this is adding sinudoidal harmonics
-				if(n*freq >= sr / 2)
-				{ //nyquist frequency check
-					break;
-				}
-
-				audioblock[j] += 16000 * (1. / n)*sin((ndx*TWO_PI*n*freq) / sr);
-			}
-
-			if(ndx >= dur*sr)
-			{ 
-				//this is ending the loop before it goes out of bounds
-				continue;
-			}
-			else
-			{
-				audioblock[j] *= env[ndx];
-			}
-		}
-		fwrite(audioblock, sizeof(short), blockframes, fpout);
-	}
-}
-
-void breaks(float* pointList, float* levelList, int length)
-//This is the menu for the number of jumps the user wants in the modulator
-{
-	bool flag = 0;
-	int freq;
-
-	printf("Input phasor frequency:");
-	scanf("%i", &freq);
-
-	for(int i = 0; i < length; i++){	
-		printf("Input next jump point as a percentage of phase (0.-1.):");
-		scanf("%f", &pointList[i]);
-
-		printf("Input jump destination as a percentage of amplitude (0.-1.):");
-		scanf("%f", &levelList[i]);
-	}
-}
-
-void addsyn(int dur)
-{
-	int harmnum, relamp;
-
-	printf("How many harmonics would you like in the carrier?");
-	scanf("%d", &harmnum);
-
-	printf("Choose the relative harmonic strength:\n 1. 1/n\n 2. 1/n^2\n 3.sqrt(n) (normalised)\n");
-	scanf("%d", &relamp);
-
-	// #TODO fix me
-	// carriergen(dur, harmnum, relamp);
-}
-
-void carriergen(int end, int blockframes, short* audioblock, int freq, int sr, int dur, double* env, int bd)
-{
-	int i, j, n, ndx = 0;
-	envelope(env, sr, dur);
-
-	for(i = 0; i < end; i += blockframes)
-	{
-		for(j = 0; j < blockframes; j++, ndx++)
-		{
-			audioblock[j] = 0;
-
-			for(int h = 1; h < 200; h++)
-			{
-				n = (2 * h) - 1;
-				if(n*freq >= sr / 2)
-				{
-					break;
-				}
-
-				audioblock[j] += 16000 * (1. / n)*sin((ndx*TWO_PI*n*freq) / sr);
-			}
-			if(ndx >= dur*sr)
-			{
-				continue;
-			}
-			else
-			{
-				audioblock[j] *= env[ndx];
-			}
-		}
-		fwrite(audioblock, sizeof(short), blockframes, fpout);
-	}
-}
-*/
-
+// This functon call creates the header for a .wav file
+// It contains all the meta-data used by programs to decode
+// the contents of the wave file. The audio data begins
+// immediately after the end of the header.
 void update_header(wavehead* header, int sr, int channels, int precision, int databytes)
 {
 	header->magic = (*(long *)RIFF_ID);
