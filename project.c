@@ -14,6 +14,7 @@ FILE* fpout;
 
 void modulator(double* baseFreqTable, int sr, int dur, int freq, int samplesInBaseFrequencyPeriod, double TWO_PI);
 void envelope(double *arr, int sr, int dur);
+void carrier(double *arr, int sr, int dur, int freq);
 
 int main(int argc, char** argv)
 {
@@ -176,6 +177,23 @@ void envelope(double *arr, int sr, int dur)
 			arr[sr*dur - i] = inc*i;
 		}
 	}
+}
+
+void carrier(double *arr, int sr, int dur, int freq, float TWO_PI){
+
+	length = sr*dur;
+	sampPerCycle = sr/freq;
+
+	double* wave = (double*)malloc(sampPerCycle * sizeof(double));
+
+	for(int i = 0;i<sampPerCycle;i++){
+		wave[i]=sin(i*(TWO_PI/sampPerCycle));
+	}
+
+	for(int i=0;i<length;i++){
+		arr[i] = wave[i%sampPerCycle];
+	}
+return;
 }
 
 // This functon call creates the header for a .wav file
