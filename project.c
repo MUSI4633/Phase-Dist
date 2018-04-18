@@ -13,7 +13,7 @@
 FILE* fpout;
 
 void envelope(double *arr, int sr, int dur);
-void modulator(double* baseFreqTable, int sr, int freq, int samplesInBaseFrequencyPeriod, double TWO_PI);
+void modulator(double* invertedBaseFreqTable, int sr, int freq, int samplesInBaseFrequencyPeriod, double TWO_PI);
 void carrier(double *arr, int sr, int phasorFreq, int samplesInPhasorFrequencyPeriod, double TWO_PI);
 
 int main(int argc, char** argv)
@@ -61,18 +61,23 @@ int main(int argc, char** argv)
 	// adsr
 	envelope(env, sr, dur);
 
-	double* baseFreqTable = (double*)malloc(samplesInBaseFrequencyPeriod * sizeof(double));
+	double* invertedBaseFreqTable = (double*)malloc(samplesInBaseFrequencyPeriod * sizeof(double));
 	double* phasorFreqTable = (double*)malloc(samplesInPhasorFrequencyPeriod * sizeof(double));
 
-	modulator(baseFreqTable, sr, freq, samplesInBaseFrequencyPeriod, TWO_PI);
+	modulator(invertedBaseFreqTable, sr, freq, samplesInBaseFrequencyPeriod, TWO_PI);
 	carrier(phasorFreqTable, sr, phasorFreq, samplesInPhasorFrequencyPeriod, TWO_PI);
 
 	for(i = 0; i < end; i += blockframes)
 	{
-		for(j = 0; j < blockframes; j++, adsrIndex++)
+		for(j = 0; j < blockframes; j++, adsrIndex++, phaseIndex++)
 		{
-			audioblock[j] = (baseFreqTable[adsrIndex % samplesInBaseFrequencyPeriod] / 16000) *
-				(-phasorFreqTable[adsrIndex % samplesInPhasorFrequencyPeriod]);
+			audioblock[j] = (invertedBaseFreqTable[phaseIndex % samplesInBaseFrequencyPeriod] / 16000) *
+				(phasorFreqTable[phaseIndex % samplesInPhasorFrequencyPeriod]);
+
+			if(phaseIndex >= samplesInBaseFrequencyPeriod)
+			{
+				phaseIndex = 0;
+			}
 
 			// fills the rest of the file with 0's so the audio ends at
 			// the end of the last wave that has completed the full wave/period/cycle
@@ -161,7 +166,7 @@ void envelope(double *arr, int sr, int dur)
 	}
 }
 
-void modulator(double* baseFreqTable, int sr, int freq, int samplesInBaseFrequencyPeriod, double TWO_PI)
+void modulator(double* invertedBaseFreqTable, int sr, int freq, int samplesInBaseFrequencyPeriod, double TWO_PI)
 {
 	for(int phaseIndex = 0; phaseIndex < samplesInBaseFrequencyPeriod; phaseIndex++)
 	{
@@ -179,7 +184,7 @@ void modulator(double* baseFreqTable, int sr, int freq, int samplesInBaseFrequen
 			sample += 16000 * pow(-1, (n + 1)) / n * sin(phaseIndex * TWO_PI * n * freq / sr);
 		}
 
-		baseFreqTable[phaseIndex] = sample;
+		invertedBaseFreqTable[phaseIndex] = ((-1 * sample) + 16000) / 2;
 	}
 }
 
