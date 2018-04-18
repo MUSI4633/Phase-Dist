@@ -71,12 +71,12 @@ int main(int argc, char** argv)
 	{
 		for(j = 0; j < blockframes; j++, adsrIndex++, phaseIndex++)
 		{
-			audioblock[j] = (invertedBaseFreqTable[phaseIndex % samplesInBaseFrequencyPeriod]) *
-				(phasorFreqTable[phaseIndex % samplesInPhasorFrequencyPeriod])*16000;
+			audioblock[j] = (invertedBaseFreqTable[phaseIndex % samplesInBaseFrequencyPeriod]) * 
+				(phasorFreqTable[phaseIndex % samplesInPhasorFrequencyPeriod])*9000;
 
 			if(phaseIndex >= samplesInBaseFrequencyPeriod)
 			{
-				phaseIndex = 0;
+				phaseIndex = -1;
 			}
 
 			// fills the rest of the file with 0's so the audio ends at
@@ -168,7 +168,7 @@ void envelope(double *arr, int sr, int dur)
 
 void modulator(double* invertedBaseFreqTable, int sr, int freq, int samplesInBaseFrequencyPeriod, double TWO_PI)
 {
-	for(int phaseIndex = 0; phaseIndex < samplesInBaseFrequencyPeriod; phaseIndex++)
+	for(int phaseIndex = 75, arrayPos = 0; phaseIndex < (samplesInBaseFrequencyPeriod + 75); phaseIndex++, arrayPos++)
 	{
 		double sample = 0;
 
@@ -184,7 +184,7 @@ void modulator(double* invertedBaseFreqTable, int sr, int freq, int samplesInBas
 			sample += pow(-1, (n + 1)) / n * sin(phaseIndex * TWO_PI * n * freq / sr);
 		}
 
-		invertedBaseFreqTable[phaseIndex] = ((-1 * sample)+1.)/2. ;
+		invertedBaseFreqTable[arrayPos] = (-1 * ((sample+1.5))) + 3.202;
 	}
 }
 
