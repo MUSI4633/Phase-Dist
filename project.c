@@ -129,11 +129,10 @@ void envelope(double *arr, int sr, int dur)
 	if(a + d + r >= dur * 1000)
 	{
 		printf("Invalid envelope length. Amplitude will be constant. \n");
-		int i = 0;
-		while(arr[i])
+
+		for(int i = 0; i < dur * sr; i++)
 		{
 			arr[i] = 0.8;
-			i++;
 		}
 	}
 	else
