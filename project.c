@@ -71,13 +71,13 @@ int main(int argc, char** argv)
 	{
 		for(j = 0; j < blockframes; j++, adsrIndex++, phaseIndex++)
 		{
-			audioblock[j] = (invertedBaseFreqTable[phaseIndex % samplesInBaseFrequencyPeriod]) * 
-				(phasorFreqTable[phaseIndex % samplesInPhasorFrequencyPeriod])*9000;
-
-			if(phaseIndex >= samplesInBaseFrequencyPeriod)
+			if((phaseIndex + 1) >= samplesInBaseFrequencyPeriod)
 			{
-				phaseIndex = -1;
+				phaseIndex = 0;
 			}
+
+			audioblock[j] = (invertedBaseFreqTable[phaseIndex % samplesInBaseFrequencyPeriod]) * 
+				(phasorFreqTable[phaseIndex % samplesInPhasorFrequencyPeriod]) * 9000 * env[adsrIndex];
 
 			// fills the rest of the file with 0's so the audio ends at
 			// the end of the last wave that has completed the full wave/period/cycle
@@ -88,10 +88,6 @@ int main(int argc, char** argv)
 					audioblock[j] = 0;
 				}
 			}
-
-			// #TODO fix adsr envelope
-			// Invert the base frequency counter
-			//audioblock[j] = -audioblock[j]; // * env[adsrIndex];
 		}
 		// Append the created block to the .wav file
 		// (Blocks are just an arbitrary number of samples, they
@@ -172,7 +168,7 @@ void modulator(double* invertedBaseFreqTable, int sr, int freq, int samplesInBas
 	{
 		double sample = 0;
 
-		for(int n = 1; n < 100; n++)
+		for(int n = 1; n < 200; n++)
 		{
 			if(n * freq >= sr / 2)	
 			{ 
@@ -184,7 +180,7 @@ void modulator(double* invertedBaseFreqTable, int sr, int freq, int samplesInBas
 			sample += pow(-1, (n + 1)) / n * sin(phaseIndex * TWO_PI * n * freq / sr);
 		}
 
-		invertedBaseFreqTable[arrayPos] = (-1 * ((sample+1.5))) + 3.202;
+		invertedBaseFreqTable[arrayPos] = (-1 * ((sample+1.5))) + 3.2;
 	}
 }
 
