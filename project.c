@@ -12,12 +12,14 @@
 					  and the declaration of update_header() */
 FILE* fpout;
 
+// function prototypes
 void envelope(double *arr, int sr, int dur);
 void modulator(double* invertedBaseFreqTable, int sr, int freq, int samplesInBaseFrequencyPeriod, double TWO_PI);
 void carrier(double *arr, int sr, int phasorFreq, int samplesInPhasorFrequencyPeriod, double TWO_PI);
 
 int main(int argc, char** argv)
 {
+	// define variables
 	short   *audioblock;      /* audio memory pointer */
 	int     end, i, j, n;       /* dur in frames, counter vars */
 	int     sr = 44100, samplesInBaseFrequencyPeriod = 0, samplesInPhasorFrequencyPeriod = 0;      /* sampling rate, number of samples in a full cycle at the base frequency */
@@ -37,6 +39,7 @@ int main(int argc, char** argv)
 		exit(-1);
 	}
 
+	// populate variables
 	fpout = fopen(argv[1], "wb");
 	dur = atof(argv[2]);
 	freq = atof(argv[3]);
@@ -61,9 +64,11 @@ int main(int argc, char** argv)
 	// adsr
 	envelope(env, sr, dur);
 
+	// allocate memory for the wave tables
 	double* invertedBaseFreqTable = (double*)malloc(samplesInBaseFrequencyPeriod * sizeof(double));
 	double* phasorFreqTable = (double*)malloc(samplesInPhasorFrequencyPeriod * sizeof(double));
 
+	// populate the wave tables
 	modulator(invertedBaseFreqTable, sr, freq, samplesInBaseFrequencyPeriod, TWO_PI);
 	carrier(phasorFreqTable, sr, phasorFreq, samplesInPhasorFrequencyPeriod, TWO_PI);
 
@@ -71,11 +76,13 @@ int main(int argc, char** argv)
 	{
 		for(j = 0; j < blockframes; j++, adsrIndex++, phaseIndex++)
 		{
+			// Reset the phase index (used by both wave tables) at the end of the base frequency period
 			if((phaseIndex + 1) >= samplesInBaseFrequencyPeriod)
 			{
 				phaseIndex = 0;
 			}
 
+			// Sample to be written to audio file
 			audioblock[j] = (invertedBaseFreqTable[phaseIndex % samplesInBaseFrequencyPeriod]) * 
 				(phasorFreqTable[phaseIndex % samplesInPhasorFrequencyPeriod]) * 9000 * env[adsrIndex];
 
@@ -161,6 +168,7 @@ void envelope(double *arr, int sr, int dur)
 	}
 }
 
+// This function creates the sawtooth wave table with the base frequency
 void modulator(double* invertedBaseFreqTable, int sr, int freq, int samplesInBaseFrequencyPeriod, double TWO_PI)
 {
 	for(int phaseIndex = 75, arrayPos = 0; phaseIndex < (samplesInBaseFrequencyPeriod + 75); phaseIndex++, arrayPos++)
@@ -183,6 +191,7 @@ void modulator(double* invertedBaseFreqTable, int sr, int freq, int samplesInBas
 	}
 }
 
+// This function creates the sin wave table with the phasor frequency
 void carrier(double *arr, int sr, int phasorFreq, int samplesInPhasorFrequencyPeriod, double TWO_PI)
 {
 	for(int i = 0; i < samplesInPhasorFrequencyPeriod; i++)
