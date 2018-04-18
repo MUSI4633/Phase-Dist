@@ -12,6 +12,7 @@
 					  and the declaration of update_header() */
 FILE* fpout;
 
+void modulator(double* baseFreqTable, int sr, int dur, int freq, int samplesInBaseFrequencyPeriod, double TWO_PI);
 void envelope(double *arr, int sr, int dur);
 
 int main(int argc, char** argv)
@@ -58,45 +59,29 @@ int main(int argc, char** argv)
 	// adsr
 	envelope(env, sr, dur);
 
+	double* baseFreqTable = (double*)malloc(samplesInBaseFrequencyPeriod * sizeof(double));
+
+	modulator(baseFreqTable, sr, dur, freq, samplesInBaseFrequencyPeriod, TWO_PI);
+
 	for(i = 0; i < end; i += blockframes)
 	{
-		for(j = 0; j < blockframes; j++, phaseIndex++, adsrIndex++)
+		for(j = 0; j < blockframes; j++, adsrIndex++)
 		{
-			float baseFrequencyCounter = 0;
-			audioblock[j] = 0;
+			audioblock[j] = baseFreqTable[adsrIndex % samplesInBaseFrequencyPeriod];
 
-			for(int n = 1; n < 100; n ++)
+			// fills the rest of the file with 0's so the audio ends at
+			// the end of the last wave that has completed the full wave/period/cycle
+			if((adsrIndex + samplesInBaseFrequencyPeriod) > end)
 			{
-				if(n * freq >= sr / 2)	
-				{ 
-					// nyquist frequency check
-					break;
-				}
-
-				// Sawtooth wave 
-				//baseFrequencyCounter += 16000 * pow(-1, (n + 1)) / n * sin(phaseIndex * TWO_PI * n * phasorFreq / sr);
-				audioblock[j] += 16000 * pow(-1, (n + 1)) / n * sin(phaseIndex * TWO_PI * n * phasorFreq / sr);
-			}
-	
-			// #TODO fix adsr envelope
-			//audioblock[j] *= (-baseFrequencyCounter);// * env[adsrIndex];
-
-			// if one full base frequency period has passed
-			if(phaseIndex >= samplesInBaseFrequencyPeriod)
-			{
-				// reset the phase index
-				phaseIndex = 0;
-
-				// fills the rest of the file with 0's so the audio ends at
-				// the end of the last wave that has completed the full wave/period/cycle
-				if((adsrIndex + samplesInBaseFrequencyPeriod) > end)
+				for(; j < blockframes; j++)
 				{
-					for(; j < blockframes; j++)
-					{
-						audioblock[j] = 0;
-					}
+					audioblock[j] = 0;
 				}
-			}	 		
+			}
+
+			// #TODO fix adsr envelope
+			// Invert the base frequency counter
+			//audioblock[j] = -audioblock[j]; // * env[adsrIndex];
 		}
 		// Append the created block to the .wav file
 		// (Blocks are just an arbitrary number of samples, they
@@ -113,6 +98,28 @@ int main(int argc, char** argv)
 	fclose(fpout);
 
 	return 0;
+}
+
+void modulator(double* baseFreqTable, int sr, int dur, int freq, int samplesInBaseFrequencyPeriod, double TWO_PI)
+{
+	for(int phaseIndex = 0; phaseIndex < samplesInBaseFrequencyPeriod; phaseIndex++)
+	{
+		double sample = 0;
+
+		for(int n = 1; n < 100; n++)
+		{
+			if(n * freq >= sr / 2)	
+			{ 
+				// nyquist frequency check
+				break;
+			}
+			
+			// Sawtooth wave 
+			sample += 16000 * pow(-1, (n + 1)) / n * sin(phaseIndex * TWO_PI * n * freq / sr);
+		}
+
+		baseFreqTable[phaseIndex] = sample;
+	}
 }
 
 // This function creates the ADSR envelope. The array
