@@ -55,7 +55,7 @@ int main(int argc, char** argv)
 	//allocate space for the envelope
 	double* env = (double*)malloc(end * sizeof(double));
 
-	////////////////////////////////////////////////////////////////////////
+	// generate the LFO
 	double* lfo = (double*)malloc(end * sizeof(double));
 
 	/* write the header */
@@ -174,6 +174,7 @@ void envelope(double *arr, int sr, int dur)
 	}
 }
 
+// this function creates the phasor.
 void modulator(double* invertedBaseFreqTable, int sr, int freq, int samplesInBaseFrequencyPeriod, double TWO_PI)
 {
 	for(int phaseIndex = (samplesInBaseFrequencyPeriod*0.5)+2, arrayPos = 0; phaseIndex < (samplesInBaseFrequencyPeriod+2+(samplesInBaseFrequencyPeriod*0.5)); phaseIndex++, arrayPos++)
@@ -212,12 +213,11 @@ void carrier(double *arr, int sr, int phasorFreq, int samplesInPhasorFrequencyPe
 	
 }
 
+//this generates a signal that modulates the amount of the modulator wave mixed in
 void lfoGen(double *arr, int sr, int dur, double TWO_PI){
 	char shape;
 	float frequency, depth;
 	
-	
-
 	printf("what will be the LFO frequency for the wavemixing?");
 	scanf("%f", &frequency);
 	int samplePerCycle = (int) sr/frequency;
