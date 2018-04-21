@@ -12,14 +12,14 @@
 					  and the declaration of update_header() */
 FILE* fpout;
 
-// function prototypes
 void envelope(double *arr, int sr, int dur);
 void modulator(double* invertedBaseFreqTable, int sr, int freq, int samplesInBaseFrequencyPeriod, double TWO_PI);
 void carrier(double *arr, int sr, int phasorFreq, int samplesInPhasorFrequencyPeriod, double TWO_PI);
+void lfoGen(double *arr, int sr, int dur, double TWO_PI);
+double normalize(double *sin, double *phase, double *mod);
 
 int main(int argc, char** argv)
 {
-	// define variables
 	short   *audioblock;      /* audio memory pointer */
 	int     end, i, j, n;       /* dur in frames, counter vars */
 	int     sr = 44100, samplesInBaseFrequencyPeriod = 0, samplesInPhasorFrequencyPeriod = 0;      /* sampling rate, number of samples in a full cycle at the base frequency */
@@ -39,7 +39,6 @@ int main(int argc, char** argv)
 		exit(-1);
 	}
 
-	// populate variables
 	fpout = fopen(argv[1], "wb");
 	dur = atof(argv[2]);
 	freq = atof(argv[3]);
@@ -56,6 +55,9 @@ int main(int argc, char** argv)
 	//allocate space for the envelope
 	double* env = (double*)malloc(end * sizeof(double));
 
+	// generate the LFO
+	double* lfo = (double*)malloc(end * sizeof(double));
+
 	/* write the header */
 	header = (wavehead*)malloc(sizeof(wavehead));
 	update_header(header, sr, channels, 16, databytes);
@@ -63,28 +65,30 @@ int main(int argc, char** argv)
 
 	// adsr
 	envelope(env, sr, dur);
+	
+	
+	
+	printf("\n");
+	lfoGen(lfo, sr, dur, TWO_PI);
 
-	// allocate memory for the wave tables
 	double* invertedBaseFreqTable = (double*)malloc(samplesInBaseFrequencyPeriod * sizeof(double));
 	double* phasorFreqTable = (double*)malloc(samplesInPhasorFrequencyPeriod * sizeof(double));
 
-	// populate the wave tables
 	modulator(invertedBaseFreqTable, sr, freq, samplesInBaseFrequencyPeriod, TWO_PI);
 	carrier(phasorFreqTable, sr, phasorFreq, samplesInPhasorFrequencyPeriod, TWO_PI);
 
+	//double mean = normalize(invertedBaseFreqTable,phasorFreqTable, lfo);
 	for(i = 0; i < end; i += blockframes)
 	{
 		for(j = 0; j < blockframes; j++, adsrIndex++, phaseIndex++)
 		{
-			// Reset the phase index (used by both wave tables) at the end of the base frequency period
 			if((phaseIndex + 1) >= samplesInBaseFrequencyPeriod)
 			{
 				phaseIndex = 0;
 			}
 
-			// Sample to be written to audio file
-			audioblock[j] = (invertedBaseFreqTable[phaseIndex % samplesInBaseFrequencyPeriod]) * 
-				(phasorFreqTable[phaseIndex % samplesInPhasorFrequencyPeriod]) * 9000 * env[adsrIndex];
+			audioblock[j] =  ((1.-(invertedBaseFreqTable[phaseIndex % samplesInBaseFrequencyPeriod]*lfo[adsrIndex])*8000) 
+				 +(phasorFreqTable[phaseIndex % samplesInPhasorFrequencyPeriod] * 8000)) * env[adsrIndex];
 
 			// fills the rest of the file with 0's so the audio ends at
 			// the end of the last wave that has completed the full wave/period/cycle
@@ -96,6 +100,7 @@ int main(int argc, char** argv)
 				}
 			}
 		}
+
 		// Append the created block to the .wav file
 		// (Blocks are just an arbitrary number of samples, they
 		// are not necessarily the start or the end of any wave)
@@ -136,24 +141,25 @@ void envelope(double *arr, int sr, int dur)
 	if(a + d + r >= dur * 1000)
 	{
 		printf("Invalid envelope length. Amplitude will be constant. \n");
-
-		for(int i = 0; i < dur * sr; i++)
+		int i = 0;
+		while(arr[i])
 		{
 			arr[i] = 0.8;
+			i++;
 		}
 	}
 	else
 	{
-		double increment = 1. / (period*a);
+		double increment = 0.9 / (period*a);
 		for(int i = 0; i < period*a; i++)
 		{
 			arr[i] = increment*i;
 		}
 
-		increment = (1. - s) / (period*d);
+		increment = (0.9 - s) / (period*d);
 		for(int i = period*a; i < period*(a+d); i++)
 		{
-			arr[i] = 1. - (increment*(i-(period*a)));
+			arr[i] = 0.9 - (increment*(i-(period*a)));
 		}
 		for(int i = period*(d+a); i < (sr*dur - period*r); i++)
 		{
@@ -168,10 +174,10 @@ void envelope(double *arr, int sr, int dur)
 	}
 }
 
-// This function creates the sawtooth wave table with the base frequency
+// this function creates the phasor.
 void modulator(double* invertedBaseFreqTable, int sr, int freq, int samplesInBaseFrequencyPeriod, double TWO_PI)
 {
-	for(int phaseIndex = 75, arrayPos = 0; phaseIndex < (samplesInBaseFrequencyPeriod + 75); phaseIndex++, arrayPos++)
+	for(int phaseIndex = (samplesInBaseFrequencyPeriod*0.5)+2, arrayPos = 0; phaseIndex < (samplesInBaseFrequencyPeriod+2+(samplesInBaseFrequencyPeriod*0.5)); phaseIndex++, arrayPos++)
 	{
 		double sample = 0;
 
@@ -187,17 +193,93 @@ void modulator(double* invertedBaseFreqTable, int sr, int freq, int samplesInBas
 			sample += pow(-1, (n + 1)) / n * sin(phaseIndex * TWO_PI * n * freq / sr);
 		}
 
-		invertedBaseFreqTable[arrayPos] = (-1 * ((sample+1.5))) + 3.2;
+		invertedBaseFreqTable[arrayPos] = (-1 * ((sample+1.5)))+3.2;
 	}
 }
 
-// This function creates the sin wave table with the phasor frequency
+//This function creates the carrier wave with additive octaves
 void carrier(double *arr, int sr, int phasorFreq, int samplesInPhasorFrequencyPeriod, double TWO_PI)
 {
-	for(int i = 0; i < samplesInPhasorFrequencyPeriod; i++)
-	{
-		arr[i] = sin(i*(TWO_PI/samplesInPhasorFrequencyPeriod));
+	int harmNumber;
+	printf("how may octaves would you like in the carrier?:");
+	scanf("%d", &harmNumber);
+
+	for(int j =1;j<harmNumber+1;j*=2){
+		for(int i = 0; i < samplesInPhasorFrequencyPeriod; i++)
+		{
+		arr[i] += sin(j*i*(TWO_PI/samplesInPhasorFrequencyPeriod))*pow(0.5,j);
+		}
 	}
+	
+}
+
+//this generates a signal that modulates the amount of the modulator wave mixed in
+void lfoGen(double *arr, int sr, int dur, double TWO_PI){
+	char shape;
+	float frequency, depth;
+	
+	printf("what will be the LFO frequency for the wavemixing?");
+	scanf("%f", &frequency);
+	int samplePerCycle = (int) sr/frequency;
+
+	double* oneCycle = (double*)malloc(samplePerCycle * sizeof(double));
+
+	printf("what LFO shape would you like?\n 1. Sine\n 2. Square \n 3. Reverse Sawtooth\n 4. Sawtooth\n 5. Constant\n");
+	scanf(" %c", &shape);
+	printf("\n");
+
+	printf("what will be the LFO depth (0-1)? Lower = less harmonics.");
+	scanf("%f", &depth);
+	
+
+	if(shape == '1'){
+		
+		for(int i=0;i<samplePerCycle;i++){
+			oneCycle[i] = depth * (sin(i*(TWO_PI/samplePerCycle)) +1.)/2.;
+		}
+	}
+	
+	if(shape == '2'){
+		for(int i=0;i<samplePerCycle/2;i++){
+			oneCycle[i] = 0.;
+		}
+		for(int i=samplePerCycle/2;i<samplePerCycle;i++){
+			oneCycle[i] = depth;
+		}
+	}
+
+	if(shape == '3'){
+		for(int i=0;i<samplePerCycle;i++){
+			oneCycle[i] = 0.5-(i*(depth/samplePerCycle));
+		}
+	}
+	if(shape == '4'){
+		for(int i=0;i<samplePerCycle;i++){
+			oneCycle[i] = i*(depth/samplePerCycle);
+		}
+	}
+
+	if(shape == '5') {
+		for(int i=0;i<samplePerCycle;i++){
+			oneCycle[i] = depth;
+		}
+	}
+	
+	for(int i =0;i<sr*dur;i++){
+		arr[i] = oneCycle[i%samplePerCycle];
+	}
+}
+
+//This function removes DC bias in the signal
+double normalize(double *sin, double *phase, double *mod){
+	double mean;
+	for(int i=0;i<sizeof(sin);i++){
+	mean += (((phase[i] * (1.- mod[i]))) 
+				+ (sin[i] * (1. + mod[i])));
+		}
+	mean /= (sizeof(sin));
+	mean *=8000;
+return mean;
 }
 
 // This functon call creates the header for a .wav file
